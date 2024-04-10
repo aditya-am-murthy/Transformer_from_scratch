@@ -1,20 +1,8 @@
-import math
-import tensorflow as tf
 import numpy as np
-import bpemb as BPEmb
+import tensorflow as tf
+from attention import attention_dot_product
 
-def attention_dot_product(query, key, value, mask=None, scaled=True):
-    key_dim = tf.cast(tf.shape(key)[-1], tf.float32)
-    key_scores = tf.matmul(query, key, transpose_b=True)
-    if scaled:
-        key_scores = key_scores / math.sqrt(key_dim)
-    if mask is not None:
-        key_scores = tf.where(mask==0, -np.inf, key_scores)
-    softmax = tf.keras.layers.Softmax()
-    key_weights = softmax(key_scores)
-    return np.matmul(key_weights, value).round(1), key_weights
-    
-def multiheaded_attention(batch_size = 1, seq_len = 3, embed_dim = 12, num_heads = 3):
+def multi_attention(batch_size = 1, seq_len = 3, embed_dim = 12, num_heads = 3):
     head_dim = embed_dim // num_heads
     keys = np.random.rand(batch_size, seq_len, embed_dim).round(1)
    
@@ -45,5 +33,41 @@ def multiheaded_attention(batch_size = 1, seq_len = 3, embed_dim = 12, num_heads
     multi_out, multi_weight = attention_dot_product(q_s_transposed, k_s_transposed, v_s_transposed)
     
     combined_out2 = tf.reshape(tf.transpose(multi_out, perm=[0, 2, 1, 3]), shape=(batch_size, seq_len, embed_dim))
-    print(combined_out2)
-    print(combined_out)
+    return combined_out2
+
+class MultiHeadSelfAttention(tf.keras.layers.Layer):
+    def __init__(self, dense_model, num_heads):
+        super(MultiHeadSelfAttention, self).__init__()
+        self.dense_model = dense_model
+        self.num_heads = num_heads
+
+        self.dense_head = self.dense_model // self.num_heads
+
+        self.wq = tf.keras.layers.Dense(self.dense_model)
+        self.wk = tf.keras.layers.Dense(self.dense_model)
+        self.wv = tf.keras.layers.Dense(self.dense_model)
+
+        self.dense = tf.keras.layers.Dense(self.dense_model)
+    
+    def split_heads(self, x):
+        batch_size = tf.shape(x)[0]
+        split_inputs = tf.reshape(x, (batch_size, -1, self.num_heads, self.dense_head))
+        return tf.transpose(split_inputs, perm=[0, 2, 1, 3])
+    
+    def merge_heads(self, x):
+        batch_size = tf.shape(x)[0]
+        merged_inputs = tf.transpose(x, perm=[0, 2, 1, 3])
+        return tf.reshape(merged_inputs, (batch_size, -1, self.dense_model))
+    
+    def call(self, q, v, k, mask):
+        q2 = self.wq(q)
+        k2 = self.wk(v)
+        v2 = self.wv(k)
+
+        q2 = self.split_heads(q2)
+        k2 = self.split_heads(k2)
+        v2 = self.split_heads(v2)
+
+        multi_out, multi_weight = attention_dot_product(q2, k2, v2, mask)
+        multi_out = self.merge_heads(multi_out)
+        return self.dense(multi_out), multi_weight
