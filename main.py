@@ -1,6 +1,8 @@
+import tensorflow as tf
 import numpy as np
 from attention import attention_dot_product
-from encoder import EncoderBlock
+from encoder import EncoderBlock, Encoder
+from embeddings import tokenize, bpmemb_en
 
 def test_attention():
     seq_len, embed_dim = 3, 4
@@ -11,11 +13,43 @@ def test_attention():
     output, attention_weights = attention_dot_product(queries, keys, values)
     print(output, attention_weights)
 
-def test_encoder():
+def test_encoderblocks():
     d_model, num_heads, hidden_dimension = 12, 3, 48
     encoder_block = EncoderBlock(d_model, num_heads, hidden_dimension)
     block_output, attention_weights = encoder_block(np.random.rand(3, 4, d_model), True, None)
     print(block_output)  
+
+def test_encoder():
+    input_batch = [
+        "There are so many lines I've crossed unforgiven",
+        "I'll tell youb the truth, but never goodbye",
+        "And now I see daylight, I only see daylight",
+    ]
+    input_seqs = bpmemb_en.encode_ids(input_batch)
+    padded_seqs = tf.keras.preprocessing.sequence.pad_sequences(input_seqs, padding='post')
+    
+    enc_mask = np.where(padded_seqs != 0, 1, 0)
+
+    enc_mask = enc_mask[:, tf.newaxis, tf.newaxis, :]
+    
+    num_encoder_blocks = 6
+    d_model = 12
+    num_heads = 3
+    hidden_dim = 48
+    src_vocab_size = bpmemb_en.vocab_size
+    max_sqn_len = padded_seqs.shape[1]
+
+    encoder = Encoder(
+        num_encoder_blocks, 
+        d_model, 
+        num_heads, 
+        hidden_dim, 
+        src_vocab_size, 
+        max_sqn_len
+    )
+
+    output, weights = encoder(padded_seqs, True, enc_mask)
+    print(output)
 
 if __name__=="__main__":
     test_encoder()
