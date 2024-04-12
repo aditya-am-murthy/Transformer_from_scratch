@@ -3,6 +3,7 @@ import numpy as np
 from attention import attention_dot_product
 from encoder import EncoderBlock, Encoder
 from embeddings import tokenize, bpmemb_en
+from decoder import DecoderBlock, Decoder
 
 def test_attention():
     seq_len, embed_dim = 3, 4
@@ -49,7 +50,30 @@ def test_encoder():
     )
 
     output, weights = encoder(padded_seqs, True, enc_mask)
+    return output
+
+def test_decoder():
+    input_batch = [
+        "There are so many lines I've crossed unforgiven",
+        "I'll tell youb the truth, but never goodbye",
+        "And now I see daylight, I only see daylight",
+    ]
+    input_seqs = bpmemb_en.encode_ids(input_batch)
+    padded_seqs = tf.keras.preprocessing.sequence.pad_sequences(input_seqs, padding='post')
+
+    dec_pad_mask = tf.cast(tf.math.not_equal(padded_seqs, 0), tf.float32)
+    dec_pad_mask = dec_pad_mask[:, tf.newaxis, tf.newaxis, :]
+
+    target_input_seq_len = padded_seqs.shape[1]
+    look_ahead_mask = tf.linalg.band_part(tf.ones((target_input_seq_len, target_input_seq_len)), -1, 0)
+
+    dec_mask = tf.minimum(dec_pad_mask, look_ahead_mask)
+
+    decoder = Decoder(6, 12, 3, 48, 10000, 8)
+    encoderOutput = test_encoder()
+    output, weights = decoder(encoderOutput, padded_seqs, True, dec_mask, dec_pad_mask)
     print(output)
 
+
 if __name__=="__main__":
-    test_encoder()
+    test_decoder()
