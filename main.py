@@ -74,6 +74,8 @@ def test_decoder():
     output, weights = decoder(encoderOutput, padded_seqs, True, dec_mask, dec_pad_mask)
     print(output)
 
+def test_github():
+    print("testing if github is connecting to my computer")
 
 if __name__=="__main__":
     test_decoder()
